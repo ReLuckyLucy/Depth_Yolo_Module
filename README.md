@@ -38,13 +38,15 @@ Yolo 支持各种视觉人工智能任务，如检测、分割、姿态估计、
 ## 开始使用
 ### 通过 Conda 创建环境（推荐）：
 ```bash
-conda env create -f environment.yml
-conda activate dfm
-```
+conda create --name dfm_yolo python=3.11
 
-###  Pip 安装：
-```bash
+conda activate dfm
+
 pip install -r requirements.txt
+```
+由于默认下载的pytorch总是会下载到cpu版本，建议是手动输入
+```
+pip install torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 --index-url https://download.pytorch.org/whl/cu121
 ```
 
 ###  模型权重下载：
