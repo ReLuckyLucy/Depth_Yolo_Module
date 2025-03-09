@@ -1,5 +1,6 @@
 numpy==1.26.0
 einops
+gradio
 omegaconf
 matplotlib
 accelerate>=0.22.0

@@ -1,5 +1,5 @@
 <div align="center">
- <img alt="logo" height="300px" src="img\logo_depth.png">
+ <img alt="logo" height="300px" src="examples\img\logo_depth.png">
 </div>
 
 
@@ -88,4 +88,11 @@ NumPy: 1.26.0
      import os
      os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
      ```
+
+
+### 启动
+>推荐使用gradio库
+```python
+python3 gradio_depth_app.py
+```
 
