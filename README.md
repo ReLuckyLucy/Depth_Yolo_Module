@@ -94,8 +94,7 @@ NumPy: 1.26.0
 ## 项目结构
 
 ```
-Depth_Yo
-lo_Module/
+Depth_Yolo_Module/
 ├── app.py                 # 主应用程序入口
 ├── gradio_depth_app.py    # DepthFM深度估计模块封装
 ├── yolov11.py             # YOLOv11目标检测模块封装
@@ -104,8 +103,7 @@ lo_Module/
 │   └── yolov11.pt         # YOLOv11模型权重
 ├── examples/              # 示例图片
 │   └── img/
-│       ├── car.jpg
-│       └── street.jpg
+│       ├── dog.jpg
 └── README.md              # 项目文档
 ```
 
