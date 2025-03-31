@@ -137,8 +137,8 @@ demo_samples = [
 COLORMAP_OPTIONS = ["magma", "viridis", "inferno", "plasma", "cividis", "turbo", "jet"]
 
 with gr.Blocks(title="3D感知与目标检测系统", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("# 🚗 单目视觉3D感知目标检测系统")
-    gr.Markdown("基于DepthFM和YOLOv11的3D感知与车辆检测系统")
+    gr.Markdown("#单目视觉3D感知目标检测系统")
+    gr.Markdown("基于DepthFM和YOLOv11的3D感知检测系统")
     
     with gr.Row():
         # 左侧控制面板
