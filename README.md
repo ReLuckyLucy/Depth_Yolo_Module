@@ -52,6 +52,7 @@ pip install torch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 --index-url https
 ###  模型权重下载：
 ```bash
 wget https://ommer-lab.com/files/depthfm/depthfm-v1.ckpt -P checkpoints/
+wget https://github.com/ultralytics/assets/releases/download/v8.3.0/yolo11n.pt
 ```
 
 ---
