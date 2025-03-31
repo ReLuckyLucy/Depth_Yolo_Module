@@ -4,22 +4,83 @@ os.environ["XFORMERS_DISABLED"] = "1"  # 禁用xformers的Triton依赖，解决W
 
 # ==================== 库导入 ====================
 import torch
+import einops
 import numpy as np
 import gradio as gr
 from PIL import Image, ImageDraw
+from PIL.Image import Resampling
 import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
 
 # 导入自定义模块
-import gradio_depth_app  # 修改为导入整个模块
-from yolov11 import YOLOv11  # YOLOv11目标检测模块
+from depthfm import DepthFM
+from yolov11 import YOLOv11
+
+# ==================== 工具函数 ====================
+def get_dtype_from_str(dtype_str):
+    """将字符串转换为对应的torch数据类型"""
+    dtype_map = {
+        "fp32": torch.float32,
+        "fp16": torch.float16, 
+        "bf16": torch.bfloat16
+    }
+    return dtype_map[dtype_str]
+
+def resize_max_res(img, max_edge_resolution, resample=Resampling.BILINEAR):
+    """
+    保持宽高比调整图像尺寸，确保长边不超过指定分辨率
+    参数：
+        img: PIL图像对象
+        max_edge_resolution: 最大边长（像素）
+        resample: 重采样方法
+    返回：
+        调整后的图像和原始尺寸元组
+    """
+    original_w, original_h = img.size
+    scale = min(max_edge_resolution/original_w, max_edge_resolution/original_h)
+    
+    new_w = int(original_w * scale)
+    new_h = int(original_h * scale)
+    new_w = (new_w // 64) * 64  # 确保尺寸是64的倍数
+    new_h = (new_h // 64) * 64
+    
+    return img.resize((new_w, new_h), resample=resample), (original_w, original_h)
+
+def load_im(input_image, processing_res=-1):
+    """
+    图像预处理管道
+    参数：
+        input_image: Gradio传入的numpy数组格式图像
+        processing_res: 处理分辨率
+    返回：
+        预处理后的张量和原始尺寸
+    """
+    # 转换输入格式
+    pil_img = Image.fromarray(input_image).convert('RGB')
+    
+    # 自动确定处理分辨率
+    if processing_res < 0:
+        processing_res = max(pil_img.size)
+        
+    # 调整尺寸
+    resized_img, orig_size = resize_max_res(pil_img, processing_res)
+    
+    # 归一化处理
+    img_array = np.array(resized_img)
+    img_tensor = einops.rearrange(img_array, 'h w c -> c h w')  # 调整维度顺序
+    img_tensor = img_tensor / 127.5 - 1  # 归一化到[-1, 1]
+    img_tensor = torch.tensor(img_tensor, dtype=torch.float32)[None]  # 添加批次维度
+    
+    return img_tensor, orig_size
 
 # ==================== 模型初始化 ====================
 # 使用GPU如果可用
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"使用设备: {device}")
 
-# 初始化YOLOv11模型 (DepthFM会在处理函数中懒加载)
+# 初始化模型
+depth_model = DepthFM("checkpoints/depthfm-v1.ckpt")
+depth_model = depth_model.to(device).eval()
 yolo_model = YOLOv11("checkpoints/yolo11n.pt", device)
 
 # ==================== 处理函数 ====================
@@ -62,20 +123,32 @@ def process_image(input_img,
     
     # -------- 深度估计 --------
     if depth_enabled:
-        # 直接调用gradio_depth_app模块中的process_image函数
-        depth_result = gradio_depth_app.process_image(
-            input_img, 
-            num_steps=num_steps,
-            ensemble_size=ensemble_size,
-            processing_res=processing_res,
-            no_color=False,  # 始终使用彩色深度图
-            dtype="fp16" if torch.cuda.is_available() else "fp32"
-        )
+        # 数据预处理
+        input_tensor, orig_size = load_im(input_img, processing_res)
+        input_tensor = input_tensor.to(device)
+        
+        # 深度估计
+        with torch.autocast(device_type="cuda", dtype=torch.float16):
+            depth_map = depth_model.predict_depth(
+                input_tensor,
+                num_steps=num_steps,
+                ensemble_size=ensemble_size
+            )
+        
+        # 后处理
+        depth_np = depth_map.squeeze().cpu().numpy()
+        result = plt.get_cmap(depth_colormap)(depth_np, bytes=True)[..., :3]
+        
+        # 恢复原始尺寸
+        depth_result = Image.fromarray(result)
+        if depth_result.size != orig_size:
+            depth_result = depth_result.resize(orig_size, Resampling.BILINEAR)
     
     # -------- 目标检测 --------
     detections = []
     if yolo_enabled:
         detections = yolo_model.detect(input_img)
+        print(f"检测到 {len(detections)} 个对象: {detections}")  # 调试输出
         
         # 过滤低置信度检测
         detections = [d for d in detections if d['confidence'] >= confidence_threshold]
@@ -130,7 +203,7 @@ def process_image(input_img,
 # 示例图片配置
 EXAMPLE_DIR = "examples"  # 示例文件目录
 demo_samples = [
-    [os.path.join(EXAMPLE_DIR, "img/dog.png"), True, True, 2, 4, -1, "magma", 0.5],
+    [os.path.join(EXAMPLE_DIR, "img/bus.jpg"), True, True, 2, 4, -1, "magma", 0.5],
 ]
 
 # 颜色映射选项

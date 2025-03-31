@@ -4,6 +4,7 @@ import numpy as np
 import cv2
 from PIL import Image, ImageDraw, ImageFont
 import os
+import random
 
 class YOLOv11:
     """YOLOv11模型包装类，用于目标检测和结果可视化"""
@@ -42,16 +43,22 @@ class YOLOv11:
             7: "truck",
             8: "boat",
             16: "dog",    # 添加狗的类别
-            17: "cat"     # 添加猫的类别
+            17: "cat",    # 添加猫的类别
+            0: "person",  # 添加人的类别
+            1: "bicycle"  # 添加自行车的类别
         }
         
         # 颜色配置
         self.colors = {
-            "car": (0, 255, 0),        # 绿色
-            "motorcycle": (255, 0, 0),  # 红色
-            "bus": (0, 0, 255),         # 蓝色
-            "truck": (255, 255, 0),     # 黄色
-            "boat": (0, 255, 255)       # 青色
+            "car": (255, 0, 0),      # 红色
+            "motorcycle": (0, 255, 0), # 绿色
+            "bus": (0, 0, 255),      # 蓝色
+            "truck": (255, 255, 0),  # 黄色
+            "boat": (255, 0, 255),   # 紫色
+            "dog": (0, 255, 255),    # 青色
+            "cat": (255, 128, 0),    # 橙色
+            "person": (128, 255, 0), # 黄绿色
+            "bicycle": (0, 128, 255) # 天蓝色
         }
     
     def _mock_model(self):
@@ -61,7 +68,7 @@ class YOLOv11:
                 """模拟检测结果"""
                 # 创建随机检测结果
                 detections = []
-                vehicle_classes = [2, 3, 5, 7, 8, 16, 17]  # 车辆类别ID
+                vehicle_classes = [2, 3, 5, 7, 8, 16, 17, 0, 1]  # 车辆类别ID
                 
                 # 获取图像尺寸
                 height, width = img.shape[:2] if isinstance(img, np.ndarray) else (img.height, img.width)
