@@ -92,7 +92,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser("DepthFM Inference")
-    parser.add_argument("--img", type=str, default="img/dog.png",
+    parser.add_argument("--img", type=str, default="examples\img\dog.png",
                         help="Path to the input image")
     parser.add_argument("--ckpt", type=str, default="checkpoints/depthfm-v1.ckpt",
                         help="Path to the model checkpoint")

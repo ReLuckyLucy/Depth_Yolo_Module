@@ -1,10 +1,3 @@
-"""
-DepthFM Gradio可视化界面 - 修复版
-作者：AI助手
-版本：1.1
-最后更新：2024-05-20
-"""
-
 # ==================== 环境配置 ====================
 import os
 os.environ["XFORMERS_DISABLED"] = "1"  # 禁用xformers的Triton依赖，解决Windows兼容问题
