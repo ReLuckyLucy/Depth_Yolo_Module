@@ -17,13 +17,8 @@ jobs:
       with:
         python-version: 3.12
         activate-environment: dfm  # 设置环境名为 dfm
-        environment-yaml: |
-          name: dfm
-          channels:
-            - defaults
-            - conda-forge
-          dependencies:
-            - python=3.12
+        environment-file: environment.yml  # 使用单独的 environment.yml 文件
+        auto-activate-base: false  # 禁用自动激活 base 环境
 
     # 安装项目依赖
     - name: Install dependencies from requirements.txt
