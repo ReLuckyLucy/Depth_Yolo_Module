@@ -12,3 +12,4 @@ xformers>=0.0.20
 torch>=2.0.0
 torchvision>=0.15.0
 opencv-python>=4.5.0 
+ultralytics

@@ -122,6 +122,5 @@ python3 app.py
 > app.py内已经包含了两个模块
 >
 >若只想运行其中一个，则可以运行下面的
-> - 
 > - gradio_yolo_app.py
 > - gradio_depth_app.py
