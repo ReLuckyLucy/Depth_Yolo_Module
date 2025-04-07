@@ -1,0 +1,49 @@
+name: Python Package using Conda
+
+on: [push]
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      max-parallel: 5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # 使用 Miniconda 管理环境
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        python-version: 3.12
+        activate-environment: dfm  # 设置环境名为 dfm
+        environment-yaml: |
+          name: dfm
+          channels:
+            - defaults
+            - conda-forge
+          dependencies:
+            - python=3.12
+
+    # 安装项目依赖
+    - name: Install dependencies from requirements.txt
+      run: |
+        pip install -r requirements.txt
+
+    # 安装测试工具（flake8 和 pytest）
+    - name: Install testing tools
+      run: |
+        pip install flake8 pytest
+
+    # 代码检查
+    - name: Lint with flake8
+      run: |
+        # 严格检查（停止构建）
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # 非严格检查（输出统计信息）
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    # 运行测试
+    - name: Test with pytest
+      run: |
+        pytest
