@@ -11,10 +11,10 @@ from PIL import Image, ImageDraw
 from PIL.Image import Resampling
 import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
+from ultralytics import YOLO  # 导入YOLO类
 
 # 导入自定义模块
 from depthfm import DepthFM
-from yolov11 import YOLOv11
 
 # ==================== 工具函数 ====================
 def get_dtype_from_str(dtype_str):
@@ -81,7 +81,9 @@ print(f"使用设备: {device}")
 # 初始化模型
 depth_model = DepthFM("checkpoints/depthfm-v1.ckpt")
 depth_model = depth_model.to(device).eval()
-yolo_model = YOLOv11("checkpoints/yolo11n.pt", device)
+
+# 初始化YOLOv11模型
+yolo_model = YOLO("checkpoints/yolo11n.pt")  # 使用ultralytics的YOLO类
 
 # ==================== 处理函数 ====================
 def process_image(input_img, 
@@ -147,14 +149,31 @@ def process_image(input_img,
     # -------- 目标检测 --------
     detections = []
     if yolo_enabled:
-        detections = yolo_model.detect(input_img)
+        # 使用ultralytics的YOLO进行检测
+        results = yolo_model(input_img, conf=confidence_threshold)
+        
+        # 提取检测结果
+        for result in results:
+            boxes = result.boxes
+            for box in boxes:
+                # 获取边界框坐标
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                conf = box.conf[0].cpu().numpy()
+                cls_id = int(box.cls[0].cpu().numpy())
+                cls_name = yolo_model.names[cls_id]
+                
+                detections.append({
+                    'box': [int(x1), int(y1), int(x2), int(y2)],
+                    'confidence': float(conf),
+                    'class_id': cls_id,
+                    'class_name': cls_name
+                })
+        
         print(f"检测到 {len(detections)} 个对象: {detections}")  # 调试输出
         
-        # 过滤低置信度检测
-        detections = [d for d in detections if d['confidence'] >= confidence_threshold]
-        
         # 可视化检测结果
-        detection_result = yolo_model.visualize(pil_img, detections)
+        detection_result = results[0].plot()  # 使用ultralytics的内置可视化
+        detection_result = Image.fromarray(detection_result)
     
     # -------- 融合结果 --------
     if depth_enabled and yolo_enabled and len(detections) > 0:
@@ -169,7 +188,9 @@ def process_image(input_img,
             box = det['box']
             cls_name = det['class_name']
             conf = det['confidence']
-            color = yolo_model.colors.get(cls_name, (255, 255, 255))
+            
+            # 使用类别名称作为颜色键
+            color = (255, 0, 0)  # 默认红色
             
             # 绘制边界框
             draw.rectangle(box, outline=color, width=3)
@@ -203,14 +224,14 @@ def process_image(input_img,
 # 示例图片配置
 EXAMPLE_DIR = "examples"  # 示例文件目录
 demo_samples = [
-    [os.path.join(EXAMPLE_DIR, "img/bus.jpg"), True, True, 2, 4, -1, "magma", 0.5],
+    [os.path.join(EXAMPLE_DIR, "img/dog.png"), True, True, 2, 4, -1, "magma", 0.5],
 ]
 
 # 颜色映射选项
 COLORMAP_OPTIONS = ["magma", "viridis", "inferno", "plasma", "cividis", "turbo", "jet"]
 
 with gr.Blocks(title="3D感知与目标检测系统", theme=gr.themes.Soft()) as demo:
-    gr.Markdown("#单目视觉3D感知目标检测系统")
+    gr.Markdown("# 单目视觉3D感知目标检测系统")
     gr.Markdown("基于DepthFM和YOLOv11的3D感知检测系统")
     
     with gr.Row():
