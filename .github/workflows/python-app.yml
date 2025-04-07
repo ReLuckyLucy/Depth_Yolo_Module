@@ -1,0 +1,66 @@
+# 此工作流程用于构建、测试 Python 应用，并运行 Gradio 应用
+# 官方文档参考: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: Python Application CI  # 工作流程名称
+
+# 触发条件：当代码推送到 main 分支或向 main 分支发起 Pull Request 时运行
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+# 权限设置（读取仓库内容）
+permissions:
+  contents: read
+
+# 定义任务
+jobs:
+  build-and-run:
+    runs-on: ubuntu-latest  # 使用最新版 Ubuntu 系统
+
+    steps:
+    # 步骤 1：检出代码到工作目录
+    - uses: actions/checkout@v4  # 官方检出代码操作
+
+    # 步骤 2：设置 Python 3.10 环境
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"  # 指定 Python 版本
+
+    # 步骤 3：安装依赖（从 requirements.txt）
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip  # 升级 pip
+        pip install flake8 pytest            # 安装测试工具
+        if [ -f requirements.txt ]; then     # 如果存在 requirements.txt
+          pip install -r requirements.txt    # 安装项目依赖（包含 gradio）
+        fi
+
+    # 步骤 4：代码规范检查（flake8）
+    - name: Lint with flake8
+      run: |
+        # 严格模式：发现语法错误或未定义名称时停止构建
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # 宽松模式：将所有错误视为警告（兼容 GitHub 编辑器 127 字符宽度限制）
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    # 步骤 5：运行单元测试（pytest）
+    - name: Test with pytest
+      run: |
+        pytest  # 执行所有 pytest 测试用例
+
+    # 新增步骤 6：运行 Gradio 应用（app.py）
+    - name: Run Gradio Application
+      run: |
+        # 后台运行应用（防止阻塞 CI 流程）
+        nohup python app.py > gradio.log 2>&1 &
+        sleep 10  # 等待 10 秒确保应用启动
+        # 检查日志中是否包含 Gradio 启动成功关键词
+        if grep -q "Running on local URL" gradio.log; then
+          echo "Gradio 应用启动成功 ✅"
+        else
+          echo "Gradio 应用启动失败 ❌"
+          exit 1  # 失败时终止流程
+        fi
