@@ -114,9 +114,14 @@ Depth_Yolo_Module/
 1. DepthFM: Fast Monocular Depth Estimation with Flow Matching
 2. YOLOv11: An Incremental Improvement for Object Detection
 
-### 启动
->推荐使用gradio库
+## 启动
+使用gradio库
 ```python
-python3 gradio_depth_app.py
+python3 app.py
 ```
-
+> app.py内已经包含了两个模块
+>
+>若只想运行其中一个，则可以运行下面的
+> - 
+> - gradio_yolo_app.py
+> - gradio_depth_app.py
