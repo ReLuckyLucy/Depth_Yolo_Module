@@ -98,7 +98,7 @@ NumPy: 1.26.0
 Depth_Yolo_Module/
 ├── app.py                 # 主应用程序入口
 ├── gradio_depth_app.py    # DepthFM深度估计模块封装
-├── yolov11.py             # YOLOv11目标检测模块封装
+├── gradio_yolo_app.py             # YOLOv11目标检测模块封装
 ├── checkpoints/           # 预训练模型存放目录
 │   ├── depthfm-v1.ckpt    # DepthFM模型权重
 │   └── yolov11.pt         # YOLOv11模型权重
