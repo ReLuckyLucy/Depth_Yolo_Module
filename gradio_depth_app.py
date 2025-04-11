@@ -10,6 +10,10 @@ from PIL import Image
 from PIL.Image import Resampling
 import matplotlib.pyplot as plt
 import gradio as gr
+import cv2
+import tempfile
+from tqdm import tqdm
+import time
 
 # 本地模型导入
 from depthfm import DepthFM
@@ -124,6 +128,98 @@ def process_image(input_img, num_steps=2, ensemble_size=4, processing_res=-1, no
     
     return result_pil
 
+# ==================== 视频处理功能 ====================
+def process_video(input_video, num_steps=2, ensemble_size=4, processing_res=512, no_color=False, dtype="fp16", frame_stride=1, progress=gr.Progress()):
+    """
+    视频深度估计处理
+    参数：
+        input_video: 输入视频路径
+        num_steps: ODE求解步数
+        ensemble_size: 集成次数
+        processing_res: 处理分辨率
+        no_color: 是否使用灰度输出
+        dtype: 计算精度
+        frame_stride: 帧采样步长（每隔多少帧处理一帧）
+        progress: Gradio进度条对象
+    返回：
+        处理后的视频路径
+    """
+    # 打开视频
+    cap = cv2.VideoCapture(input_video)
+    if not cap.isOpened():
+        raise ValueError("无法打开视频文件")
+    
+    # 获取视频信息
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    # 根据帧采样步长计算实际处理的帧数
+    processed_frames = frame_count // frame_stride
+    
+    # 创建临时输出文件
+    output_path = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
+    
+    # 创建视频写入器
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps/frame_stride, (width, height))
+    
+    # 设置进度条
+    progress(0, desc="初始化...")
+    
+    try:
+        frame_idx = 0
+        processed_idx = 0
+        
+        # 逐帧处理
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+                
+            # 按步长采样
+            if frame_idx % frame_stride == 0:
+                # 进度更新
+                progress(processed_idx/processed_frames, desc=f"处理帧 {processed_idx+1}/{processed_frames}")
+                
+                # 转换为RGB（OpenCV使用BGR）
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                
+                # 深度估计
+                depth_result = process_image(
+                    frame_rgb, 
+                    num_steps=num_steps,
+                    ensemble_size=ensemble_size,
+                    processing_res=processing_res,
+                    no_color=no_color,
+                    dtype=dtype
+                )
+                
+                # 转换回OpenCV格式
+                depth_frame = np.array(depth_result)
+                depth_frame_bgr = cv2.cvtColor(depth_frame, cv2.COLOR_RGB2BGR)
+                
+                # 写入输出视频
+                out.write(depth_frame_bgr)
+                processed_idx += 1
+                
+            frame_idx += 1
+            
+            # 每100帧检查是否用户取消
+            if frame_idx % 100 == 0 and progress.is_cancelled():
+                break
+                
+    except Exception as e:
+        raise RuntimeError(f"视频处理出错: {str(e)}")
+    finally:
+        # 释放资源
+        cap.release()
+        out.release()
+        progress(1.0, desc="处理完成")
+        
+    return output_path
+
 # ==================== Gradio界面配置 ====================
 # 示例文件配置
 EXAMPLE_DIR = "examples"  # 示例图片存放目录
@@ -134,56 +230,109 @@ demo_samples = [
 # 界面布局
 with gr.Blocks(title="DepthFM 深度估计演示", theme=gr.themes.Soft()) as demo:
     gr.Markdown("# 🎯 DepthFM 单目深度估计系统")
-    gr.Markdown(" 上传图片生成深度图，支持参数调节和多种输出格式")
+    gr.Markdown(" 上传图片或视频生成深度图，支持参数调节和多种输出格式")
     
-    with gr.Row():
-        # 左侧控制面板
-        with gr.Column(scale=1):
-            img_input = gr.Image(label="输入图像", type="numpy")
+    with gr.Tabs():
+        # === 图像处理选项卡 ===
+        with gr.TabItem("图像深度估计"):
+            with gr.Row():
+                # 左侧控制面板
+                with gr.Column(scale=1):
+                    img_input = gr.Image(label="输入图像", type="numpy")
+                    
+                    with gr.Accordion("高级参数", open=False):
+                        processing_res = gr.Slider(
+                            minimum=64, maximum=2048, value=-1,
+                            label="处理分辨率（-1=自动）", step=64
+                        )
+                        num_steps = gr.Slider(
+                            minimum=1, maximum=10, value=2,
+                            label="ODE求解步数", step=1
+                        )
+                        ensemble_size = gr.Slider(
+                            minimum=1, maximum=10, value=4,
+                            label="集成次数", step=1
+                        )
+                        dtype = gr.Dropdown(
+                            ["fp16", "fp32", "bf16"], value="fp16",
+                            label="计算精度"
+                        )
+                        no_color = gr.Checkbox(
+                            label="灰度输出", info="勾选启用单通道深度图"
+                        )
+                    
+                    submit_btn = gr.Button("🚀 开始计算", variant="primary")
+                
+                # 右侧结果展示
+                with gr.Column(scale=2):
+                    img_output = gr.Image(label="深度图结果", type="pil")
             
-            with gr.Accordion("高级参数", open=False):
-                processing_res = gr.Slider(
-                    minimum=64, maximum=2048, value=-1,
-                    label="处理分辨率（-1=自动）", step=64
-                )
-                num_steps = gr.Slider(
-                    minimum=1, maximum=10, value=2,
-                    label="ODE求解步数", step=1
-                )
-                ensemble_size = gr.Slider(
-                    minimum=1, maximum=10, value=4,
-                    label="集成次数", step=1
-                )
-                dtype = gr.Dropdown(
-                    ["fp16", "fp32", "bf16"], value="fp16",
-                    label="计算精度"
-                )
-                no_color = gr.Checkbox(
-                    label="灰度输出", info="勾选启用单通道深度图"
-                )
-            
-            submit_btn = gr.Button("🚀 开始计算", variant="primary")
-        
-        # 右侧结果展示
-        with gr.Column(scale=2):
-            img_output = gr.Image(label="深度图结果", type="pil")
-    
-    # 示例区块
-    gr.Examples(
-        examples=demo_samples,
-        inputs=[img_input, num_steps, ensemble_size, processing_res, no_color],
-        outputs=img_output,
-        fn=process_image,
-        cache_examples=False,  # 禁用缓存避免路径问题
-        label="快速示例"
-    )
+            # 示例区块
+            gr.Examples(
+                examples=demo_samples,
+                inputs=[img_input, num_steps, ensemble_size, processing_res, no_color],
+                outputs=img_output,
+                fn=process_image,
+                cache_examples=False,  # 禁用缓存避免路径问题
+                label="快速示例"
+            )
 
-    # 按钮事件绑定
-    submit_btn.click(
-        fn=process_image,
-        inputs=[img_input, num_steps, ensemble_size, processing_res, no_color, dtype],
-        outputs=img_output
-    )
+            # 按钮事件绑定
+            submit_btn.click(
+                fn=process_image,
+                inputs=[img_input, num_steps, ensemble_size, processing_res, no_color, dtype],
+                outputs=img_output
+            )
+        
+        # === 视频处理选项卡 ===
+        with gr.TabItem("视频深度估计"):
+            with gr.Row():
+                # 左侧控制面板
+                with gr.Column(scale=1):
+                    video_input = gr.Video(label="输入视频")
+                    
+                    with gr.Accordion("视频处理参数", open=True):
+                        video_processing_res = gr.Slider(
+                            minimum=128, maximum=1024, value=512,
+                            label="处理分辨率", step=64
+                        )
+                        video_frame_stride = gr.Slider(
+                            minimum=1, maximum=10, value=1,
+                            label="帧采样步长", step=1,
+                            info="每隔多少帧处理一帧（值越大处理越快，但流畅度降低）"
+                        )
+                    
+                    with gr.Accordion("深度估计参数", open=False):
+                        video_num_steps = gr.Slider(
+                            minimum=1, maximum=10, value=2,
+                            label="ODE求解步数", step=1
+                        )
+                        video_ensemble_size = gr.Slider(
+                            minimum=1, maximum=10, value=4,
+                            label="集成次数", step=1
+                        )
+                        video_dtype = gr.Dropdown(
+                            ["fp16", "fp32", "bf16"], value="fp16",
+                            label="计算精度"
+                        )
+                        video_no_color = gr.Checkbox(
+                            label="灰度输出", info="勾选启用单通道深度图"
+                        )
+                    
+                    video_submit_btn = gr.Button("🎬 开始处理视频", variant="primary")
+                
+                # 右侧结果展示
+                with gr.Column(scale=2):
+                    video_output = gr.Video(label="深度视频结果")
+                    video_status = gr.Textbox(label="处理状态", value="等待处理...", interactive=False)
+            
+            # 视频处理事件绑定
+            video_submit_btn.click(
+                fn=process_video,
+                inputs=[video_input, video_num_steps, video_ensemble_size, 
+                       video_processing_res, video_no_color, video_dtype, video_frame_stride],
+                outputs=video_output
+            )
 
 # ==================== 启动应用 ====================
 if __name__ == "__main__":
