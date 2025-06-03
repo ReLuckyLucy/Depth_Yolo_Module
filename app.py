@@ -12,6 +12,8 @@ from PIL.Image import Resampling
 import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
 from ultralytics import YOLO  # 导入YOLO类
+import cv2
+import tempfile
 
 # 导入自定义模块
 from depthfm import DepthFM
@@ -220,6 +222,91 @@ def process_image(input_img,
     
     return pil_img, depth_result, detection_result, fusion_result
 
+def process_video(input_video, num_steps=2, ensemble_size=4, processing_res=512, depth_colormap="magma", confidence_threshold=0.5, progress=gr.Progress()):
+    """
+    视频处理主函数
+    参数:
+        input_video: 输入视频路径
+        num_steps: DepthFM的ODE求解步数
+        ensemble_size: DepthFM的集成大小
+        processing_res: 处理分辨率
+        depth_colormap: 深度图颜色映射名称
+        confidence_threshold: 目标检测置信度阈值
+        progress: Gradio进度条对象
+    返回:
+        处理后的视频路径
+    """
+    # 打开视频
+    cap = cv2.VideoCapture(input_video)
+    if not cap.isOpened():
+        raise ValueError("无法打开视频文件")
+    
+    # 获取视频信息
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    # 创建临时输出文件
+    output_path = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False).name
+    
+    # 创建视频写入器
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    
+    # 设置进度条
+    progress(0, desc="初始化...")
+    
+    try:
+        frame_idx = 0
+        processed_idx = 0
+        
+        # 逐帧处理
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+                
+            # 进度更新
+            progress(processed_idx/frame_count, desc=f"处理帧 {processed_idx+1}/{frame_count}")
+            
+            # 转换为RGB（OpenCV使用BGR）
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # 深度估计
+            depth_result = process_image(
+                frame_rgb, 
+                depth_enabled=True,
+                yolo_enabled=True,
+                num_steps=num_steps,
+                ensemble_size=ensemble_size,
+                processing_res=processing_res,
+                depth_colormap=depth_colormap,
+                confidence_threshold=confidence_threshold
+            )
+            
+            # 转换回OpenCV格式
+            depth_frame = np.array(depth_result[3])  # 融合结果
+            depth_frame_bgr = cv2.cvtColor(depth_frame, cv2.COLOR_RGB2BGR)
+            
+            # 写入输出视频
+            out.write(depth_frame_bgr)
+            processed_idx += 1
+            
+            # 每100帧检查是否用户取消
+            if frame_idx % 100 == 0 and progress.is_cancelled():
+                break
+                
+    except Exception as e:
+        raise RuntimeError(f"视频处理出错: {str(e)}")
+    finally:
+        # 释放资源
+        cap.release()
+        out.release()
+        progress(1.0, desc="处理完成")
+        
+    return output_path
+
 # ==================== Gradio界面设计 ====================
 # 示例图片配置
 EXAMPLE_DIR = "examples"  # 示例文件目录
@@ -237,7 +324,15 @@ with gr.Blocks(title="3D感知与目标检测系统", theme=gr.themes.Soft()) as
     with gr.Row():
         # 左侧控制面板
         with gr.Column(scale=1):
-            img_input = gr.Image(label="输入图像", type="numpy")
+            input_type = gr.Radio(
+                choices=["图像", "视频"],
+                value="图像",
+                label="输入类型",
+                info="选择处理的媒体类型"
+            )
+            
+            img_input = gr.Image(label="输入图像", type="numpy", visible=True)
+            video_input = gr.Video(label="输入视频", visible=False)
             
             with gr.Row():
                 depth_enabled = gr.Checkbox(label="启用深度估计", value=True)
@@ -267,21 +362,34 @@ with gr.Blocks(title="3D感知与目标检测系统", theme=gr.themes.Soft()) as
                     label="置信度阈值", step=0.05
                 )
             
-            submit_btn = gr.Button("🚀 开始处理", variant="primary")
+            submit_btn = gr.Button("🚀 开始处理", variant="primary", visible=True)
+            video_submit_btn = gr.Button("🎬 开始处理视频", variant="primary", visible=False)
         
         # 右侧结果展示
         with gr.Column(scale=2):
             with gr.Tab("融合结果"):
-                fusion_output = gr.Image(label="融合结果", type="pil")
-            
+                fusion_output = gr.Image(label="融合结果", type="pil", visible=True)
+                video_output = gr.Video(label="视频输出", visible=False)
             with gr.Tab("单独结果"):
                 with gr.Row():
                     original_output = gr.Image(label="原始图像", type="pil")
                     depth_output = gr.Image(label="深度估计", type="pil")
-                
                 with gr.Row():
                     detection_output = gr.Image(label="目标检测", type="pil")
     
+    # 联动函数
+    def switch_input(input_type):
+        if input_type == "图像":
+            return gr.update(visible=True), gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=True), gr.update(visible=False)
+        else:
+            return gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=True), gr.update(visible=False), gr.update(visible=True)
+    
+    input_type.change(
+        switch_input,
+        inputs=[input_type],
+        outputs=[img_input, video_input, submit_btn, video_submit_btn, fusion_output, video_output]
+    )
+
     # 示例区块
     gr.Examples(
         examples=demo_samples,
@@ -299,6 +407,12 @@ with gr.Blocks(title="3D感知与目标检测系统", theme=gr.themes.Soft()) as
         inputs=[img_input, depth_enabled, yolo_enabled, num_steps, 
                 ensemble_size, processing_res, depth_colormap, confidence_threshold],
         outputs=[original_output, depth_output, detection_output, fusion_output]
+    )
+    
+    video_submit_btn.click(
+        fn=process_video,
+        inputs=[video_input, num_steps, ensemble_size, processing_res, depth_colormap, confidence_threshold],
+        outputs=video_output
     )
 
 # ==================== 启动应用 ====================

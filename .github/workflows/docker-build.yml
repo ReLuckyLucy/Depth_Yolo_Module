@@ -1,0 +1,41 @@
+# 工作流名称
+name: Docker Image CI
+
+# 触发条件：当推送到主分支时触发
+on:
+  push:
+    branches:
+      - main
+
+# 定义构建和发布任务
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      # 获取当前日期作为镜像标签（使用上海时区）
+      - name: Get current date for Image Tag
+        id: date
+        run: echo "value=$(TZ='Asia/Shanghai' date +'%Y-%m-%d-%H%M')" >> $GITHUB_OUTPUT
+      
+      # 检出代码
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      
+      # 登录到Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+      
+      # 构建并推送Docker镜像
+      - name: Build and Push Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: relucy/depthfm:${{ steps.date.outputs.value }},relucy/depthfm:latest
+      
+      # 添加构建摘要信息
+      - name: Push Summary
+        run: echo "### Build depthfm ${{ steps.date.outputs.value }} :rocket:" >> $GITHUB_STEP_SUMMARY 
