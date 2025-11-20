@@ -111,8 +111,8 @@ Depth_Yolo_Module/
 
 ## 参考文献
 
-1. DepthFM: Fast Monocular Depth Estimation with Flow Matching
-2. YOLOv11: An Incremental Improvement for Object Detection
+1. [DepthFM: Fast Monocular Depth Estimation with Flow Matching](https://arxiv.org/abs/2403.13788)
+2. [YOLOv11: An Incremental Improvement for Object Detection](https://arxiv.org/abs/2410.17725v1)
 
 ## 启动
 使用gradio库
