@@ -36,7 +36,9 @@ ENV PATH="/opt/conda/bin:${PATH}"
 
 # 复制项目文件并安装依赖（合并COPY和RUN命令以减少层级）
 COPY requirements.txt .
-RUN /opt/conda/bin/conda create -n yolo python=3.12 -y \
+RUN /opt/conda/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main \
+    && /opt/conda/bin/conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r \
+    && /opt/conda/bin/conda create -n yolo python=3.12 -y \
     && . /opt/conda/bin/activate yolo \
     && pip install -r requirements.txt
 
